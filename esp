@@ -1,60 +1,74 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-#define RX_PIN 16   // UART RX from STM32 TX
-#define TX_PIN 17   // UART TX (not used)
-HardwareSerial STM(1);
-
-const char* ssid = "YOUR_WIFI_NAME";
+// ----------------------------
+// CONFIGURE THESE
+// ----------------------------
+const char* ssid     = "YOUR_WIFI_NAME";
 const char* password = "YOUR_WIFI_PASSWORD";
 
 String BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN";
-String CHAT_ID = "YOUR_CHAT_ID";
+String CHAT_ID   = "YOUR_CHAT_ID";
 
-// Telegram API URL
-String telegramURL = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
+// ----------------------------
+// Serial/UART settings
+// ----------------------------
+HardwareSerial STM(2);     // UART2 (GPIO17 RX, GPIO16 TX)
 
-void setup() {
-  Serial.begin(115200);
-  STM.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
+// ----------------------------
+// Send message to Telegram
+// ----------------------------
+void sendToTelegram(String message)
+{
+    message.trim();
+    if (message.length() == 0) return;  // ignore empty messages
 
-  Serial.println("Connecting to WiFi...");
-  WiFi.begin(ssid, password);
+    String url = 
+        "https://api.telegram.org/bot" + BOT_TOKEN +
+        "/sendMessage?chat_id=" + CHAT_ID +
+        "&text=" + message;
 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(300);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi connected!");
+    HTTPClient http;
+    http.begin(url);
+
+    int httpCode = http.GET();  
+    http.end();
 }
 
-void loop() {
-  if (STM.available()) {
-    String msg = STM.readStringUntil('\n');
-    msg.trim();
-
-    Serial.print("Received from STM32: ");
-    Serial.println(msg);
-
-    sendToTelegram(msg);
-  }
+// ----------------------------
+// WiFi connect
+// ----------------------------
+void connectWiFi()
+{
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(300);
+    }
 }
 
-void sendToTelegram(String message) {
-  if (WiFi.status() != WL_CONNECTED) return;
+// ----------------------------
+// SETUP
+// ----------------------------
+void setup()
+{
+    Serial.begin(115200);
+    STM.begin(115200, SERIAL_8N1, 17, 16);   // RX=17, TX=16
 
-  HTTPClient http;
+    connectWiFi();
+}
 
-  String url = telegramURL + "?chat_id=" + CHAT_ID + "&text=" + message;
-
-  http.begin(url);
-  int httpCode = http.GET();
-
-  if (httpCode > 0) {
-    Serial.println("Telegram sent: " + message);
-  } else {
-    Serial.println("Error sending message");
-  }
-
-  http.end();
+// ----------------------------
+// MAIN LOOP
+// ----------------------------
+void loop()
+{
+    if (STM.available()) 
+    {
+        String msg = STM.readStringUntil('\n');
+        msg.trim();
+        
+        if (msg.length() > 0) {
+            sendToTelegram(msg);
+        }
+    }
 }
